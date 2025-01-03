@@ -1,0 +1,37 @@
+name: lut_generator
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - fastapi=0.104.0
+  - uvicorn=0.23.2
+  - pydantic=2.4.2
+  - opencv=4.8.1
+  - pillow=10.0.1
+  - numpy=1.24.3
+  - scipy=1.11.3
+  - pytest=7.4.2
+  - aiofiles=23.2.1
+  - python-multipart=0.0.6
+  - redis=4.6.0
+  - python-jose=3.3.0
+  - passlib=1.7.4
+  - python-dotenv=1.0.0
+  - black=23.9.1
+  - flake8=6.1.0
+  - mypy=1.5.1
+  - pip
+  - pip:
+    - llama-cpp-python==0.2.6
+    - structlog==23.1.0
+    - python-json-logger==2.0.7
+    - colorlog==6.7.0
+    - sentry-sdk==1.32.0
+    - pytest-asyncio==0.21.1
+    - pytest-cov==4.1.0
+    - httpx==0.24.1
+    - pytest-mock==3.11.1
+    - faker==19.6.2
+    - prometheus-client==0.17.1
+    - tenacity==8.2.3
