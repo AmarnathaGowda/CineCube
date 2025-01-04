@@ -37,7 +37,7 @@ api_router.include_router(
     health.router,
     prefix="/health",
     tags=["health"],
-    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else None
+    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else []
 )
 
 # LUT generation routes
@@ -45,14 +45,14 @@ api_router.include_router(
     lut.router,
     prefix="/lut",
     tags=["lut"],
-    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else None
+    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else []
 )
 
 # Current version route
 @api_router.get(
     "/version",
     tags=["system"],
-    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else None
+    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else []
 )
 async def get_version():
     """Get current API version."""
@@ -65,7 +65,7 @@ async def get_version():
 @api_router.get(
     "/status",
     tags=["system"],
-    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else None
+    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else []
 )
 async def get_system_status():
     """Get system status information."""
@@ -96,7 +96,7 @@ async def get_system_status():
 @api_router.get(
     "/docs/endpoints",
     tags=["documentation"],
-    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else None
+    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else []
 )
 async def get_endpoints_documentation() -> List[dict]:
     """Get documentation for all available endpoints."""
@@ -142,27 +142,33 @@ async def get_endpoints_documentation() -> List[dict]:
         }
     ]
 
-# Error handlers
-@api_router.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    """Handle HTTP exceptions."""
-    return {
-        "status_code": exc.status_code,
-        "detail": exc.detail,
-        "headers": getattr(exc, "headers", None)
-    }
+# # Error handlers
+# @api_router.exception_handler(HTTPException)
+# async def http_exception_handler(request, exc):
+#     """Handle HTTP exceptions."""
+#     return JSONResponse(
+#         status_code=exc.status_code,
+#         content={
+#             "status_code": exc.status_code,
+#             "detail": exc.detail,
+#             "headers": getattr(exc, "headers", None)
+#         }
+#     )
 
-@api_router.exception_handler(Exception)
-async def general_exception_handler(request, exc):
-    """Handle general exceptions."""
-    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
-    return {
-        "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
-        "detail": "Internal server error"
-    }
+# @api_router.exception_handler(Exception)
+# async def general_exception_handler(request, exc):
+#     """Handle general exceptions."""
+#     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+#     return JSONResponse(
+#         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#         content={
+#             "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             "detail": "Internal server error"
+#         }
+#     )
 
 # Development routes (only available in non-production environments)
-if not settings.is_production():
+if not settings.is_production() != "production":
     @api_router.get("/debug/config", tags=["debug"])
     async def get_debug_config():
         """Get current configuration (non-sensitive settings)."""

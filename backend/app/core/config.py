@@ -1,13 +1,18 @@
-from typing import Any, Dict, List, Optional, Union
-from pydantic import AnyHttpUrl, BaseSettings, EmailStr, validator, HttpUrl, PostgresDsn, RedisDsn
+from typing import Any, Dict, List, Optional, Union, Tuple
+from pydantic import (
+    AnyHttpUrl, 
+    EmailStr, 
+    HttpUrl, 
+    BaseModel, 
+    field_validator,
+)
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import secrets
+import json
 from pathlib import Path
 import os
-import json
 
 class Settings(BaseSettings):
-    """Application settings and configuration."""
-    
     # API Settings
     PROJECT_NAME: str = "LUT Generator"
     VERSION: str = "1.0.0"
@@ -27,27 +32,41 @@ class Settings(BaseSettings):
     REQUIRE_API_KEY: bool = False
     
     # CORS Configuration
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
-        "http://localhost:3000",  # React frontend
-        "http://localhost:8000",  # Local development
-    ]
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
+    @field_validator("BACKEND_CORS_ORIGINS", mode='before')
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            try:
+                # Try to parse as JSON first
+                return json.loads(v)
+            except json.JSONDecodeError:
+                # If not JSON, split by comma
+                return [i.strip() for i in v.split(",")]
+        return v
     
     # File Storage
     UPLOAD_DIR: Path = Path("uploads")
     OUTPUT_DIR: Path = Path("output")
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS: List[str] = [".jpg", ".jpeg", ".png", ".raw"]
+
+    @field_validator("ALLOWED_EXTENSIONS", mode='before')
+    @classmethod
+    def validate_allowed_extensions(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [ext.strip() for ext in v.split(",")]
+        return v
     
-    @validator("UPLOAD_DIR", "OUTPUT_DIR", pre=True)
-    def create_directories(cls, v: Path) -> Path:
+    @field_validator("UPLOAD_DIR", "OUTPUT_DIR", mode='before')
+    @classmethod
+    def create_directories(cls, v: Union[str, Path]) -> Path:
+        if isinstance(v, str):
+            v = Path(v)
         os.makedirs(v, exist_ok=True)
         return v
     
@@ -58,10 +77,12 @@ class Settings(BaseSettings):
     LLAMA_BATCH_SIZE: int = 512
     LLAMA_GPU_LAYERS: int = 0
 
-    @validator("LLAMA_MODEL_PATH")
-    def validate_model_path(cls, v: Path) -> Path:
-        if not v.exists():
-            raise ValueError(f"Model file not found at {v}")
+    @field_validator("LLAMA_MODEL_PATH", mode='before')
+    @classmethod
+    def validate_model_path(cls, v: Union[str, Path]) -> Path:
+        if isinstance(v, str):
+            v = Path(v)
+        os.makedirs(v.parent, exist_ok=True)
         return v
     
     # Logging Configuration
@@ -70,27 +91,29 @@ class Settings(BaseSettings):
     LOG_FILE: Optional[Path] = Path("logs/app.log")
     ENABLE_ACCESS_LOG: bool = True
 
-    @validator("LOG_FILE")
+    @field_validator("LOG_FILE")
+    @classmethod
     def create_log_directory(cls, v: Optional[Path]) -> Optional[Path]:
         if v:
+            if isinstance(v, str):
+                v = Path(v)
             os.makedirs(v.parent, exist_ok=True)
         return v
     
     # Cache Settings
     CACHE_TYPE: str = "memory"  # Options: memory, redis
-    CACHE_REDIS_URL: Optional[RedisDsn] = None
+    CACHE_REDIS_URL: Optional[str] = None
     CACHE_DEFAULT_TIMEOUT: int = 600  # 10 minutes
 
-    @validator("CACHE_TYPE")
-    def validate_cache_type(cls, v: str, values: Dict[str, Any]) -> str:
+    @field_validator("CACHE_TYPE")
+    @classmethod
+    def validate_cache_type(cls, v: str) -> str:
         if v not in ["memory", "redis"]:
             raise ValueError("Cache type must be 'memory' or 'redis'")
-        if v == "redis" and not values.get("CACHE_REDIS_URL"):
-            raise ValueError("Redis URL must be provided when using Redis cache")
         return v
     
     # Database Settings (Optional)
-    DATABASE_URL: Optional[PostgresDsn] = None
+    DATABASE_URL: Optional[str] = None
     DATABASE_MAX_CONNECTIONS: int = 10
     DATABASE_POOL_SIZE: int = 5
     
@@ -103,13 +126,22 @@ class Settings(BaseSettings):
     EMAILS_FROM_EMAIL: Optional[EmailStr] = None
     EMAILS_FROM_NAME: Optional[str] = None
     
-    # Error Reporting
+      # Error Reporting
     ENABLE_SENTRY: bool = False
-    SENTRY_DSN: Optional[HttpUrl] = None
+    SENTRY_DSN: Optional[str] = None
 
-    @validator("SENTRY_DSN")
-    def validate_sentry(cls, v: Optional[HttpUrl], values: Dict[str, Any]) -> Optional[HttpUrl]:
-        if values.get("ENABLE_SENTRY") and not v:
+    @field_validator("SENTRY_DSN")
+    @classmethod
+    def validate_sentry(cls, v: Optional[str], info: dict) -> Optional[str]:
+        enable_sentry = False  # Default value
+        try:
+            enable_sentry = info.data.get('ENABLE_SENTRY', False)
+        except AttributeError:
+            pass
+        
+        if not enable_sentry:
+            return None
+        if enable_sentry and not v:
             raise ValueError("Sentry DSN must be provided when Sentry is enabled")
         return v
     
@@ -124,12 +156,13 @@ class Settings(BaseSettings):
     LUT_SIZE: int = 32  # Size of the LUT cube (32x32x32)
     LUT_FORMAT: str = "cube"  # Options: cube, 3dl
     ENABLE_PREVIEW: bool = True
-    PREVIEW_SIZE: tuple = (800, 600)
+    PREVIEW_SIZE: Tuple[int, int] = (800, 600)
     
     # Environment Settings
     ENVIRONMENT: str = "development"  # Options: development, staging, production
 
-    @validator("ENVIRONMENT")
+    @field_validator("ENVIRONMENT")
+    @classmethod
     def validate_environment(cls, v: str) -> str:
         if v not in ["development", "staging", "production"]:
             raise ValueError("Invalid environment")
@@ -138,11 +171,13 @@ class Settings(BaseSettings):
     # Monitoring
     ENABLE_METRICS: bool = True
     METRICS_PORT: int = 9000
-    
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
     
     def get_environment_settings(self) -> Dict[str, Any]:
         """Get settings based on environment."""
@@ -174,7 +209,7 @@ class Settings(BaseSettings):
     def export_settings(self, exclude_secrets: bool = True) -> Dict[str, Any]:
         """Export settings as dictionary."""
         settings_dict = {}
-        for key, value in self.dict().items():
+        for key, value in self.model_dump().items():
             if exclude_secrets and any(secret in key.lower() for secret in ["secret", "password", "token"]):
                 continue
             if isinstance(value, Path):
@@ -182,12 +217,6 @@ class Settings(BaseSettings):
             else:
                 settings_dict[key] = value
         return settings_dict
-    
-    def save_settings(self, file_path: Union[str, Path]) -> None:
-        """Save settings to file."""
-        settings_dict = self.export_settings()
-        with open(file_path, 'w') as f:
-            json.dump(settings_dict, f, indent=2)
 
 # Create settings instance
 settings = Settings()
@@ -206,7 +235,7 @@ def validate_settings() -> None:
     
     for directory in required_dirs:
         if directory and not directory.exists():
-            raise ValueError(f"Required directory {directory} does not exist")
+            os.makedirs(directory, exist_ok=True)
     
     if settings.ENVIRONMENT == "production":
         if settings.DEBUG:

@@ -132,16 +132,6 @@ async def health_check():
         "version": "1.0.0"
     }
 
-# Request lifecycle hooks
-@app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    """Add processing time to response headers."""
-    start_time = datetime.utcnow()
-    response = await call_next(request)
-    process_time = (datetime.utcnow() - start_time).total_seconds()
-    response.headers["X-Process-Time"] = str(process_time)
-    return response
-
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:

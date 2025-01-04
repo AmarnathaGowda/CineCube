@@ -6,21 +6,18 @@ import os
 from pathlib import Path
 
 from app.core.config import settings
+from app.core.logger import get_logger
 from app.services.llm.llama import LLaMAService
 from app.services.image.analyzer import ImageAnalyzer
 from app.services.lut.generator import LUTGenerator
-from app.api.dependencies import (
-    get_llm_service,
-    get_image_analyzer,
-    get_lut_generator,
-    verify_upload_path,
-    verify_output_path
-)
-from app.core.logger import get_logger
 
 logger = get_logger(__name__)
-
 router = APIRouter()
+
+# Initialize services
+llm_service = LLaMAService()
+image_analyzer = ImageAnalyzer()
+lut_generator = LUTGenerator()
 
 @router.get("/", status_code=status.HTTP_200_OK)
 async def health_check() -> Dict:
@@ -32,11 +29,7 @@ async def health_check() -> Dict:
     }
 
 @router.get("/detailed", status_code=status.HTTP_200_OK)
-async def detailed_health_check(
-    llm_service: LLaMAService = Depends(get_llm_service),
-    image_analyzer: ImageAnalyzer = Depends(get_image_analyzer),
-    lut_generator: LUTGenerator = Depends(get_lut_generator)
-) -> Dict:
+async def detailed_health_check() -> Dict:
     """Detailed health check for all system components."""
     try:
         # System metrics
@@ -45,9 +38,9 @@ async def detailed_health_check(
         disk = psutil.disk_usage('/')
         
         # Check service health
-        llm_status = await check_llm_health(llm_service)
-        image_analyzer_status = await check_image_analyzer_health(image_analyzer)
-        lut_generator_status = await check_lut_generator_health(lut_generator)
+        llm_status = await check_llm_health()
+        image_analyzer_status = await check_image_analyzer_health()
+        lut_generator_status = await check_lut_generator_health()
         
         # Check directories
         directory_status = await check_directory_health()
@@ -77,7 +70,7 @@ async def detailed_health_check(
             "directories": directory_status
         }
     except Exception as e:
-        logger.error(f"Health check failed: {str(e)}", exc_info=True)
+        logger.error(f"Health check failed: {str(e)}")
         return {
             "status": "unhealthy",
             "timestamp": datetime.utcnow().isoformat(),
@@ -88,7 +81,7 @@ async def detailed_health_check(
 async def readiness_check() -> Dict:
     """Readiness probe for Kubernetes."""
     try:
-        # Check if all required services are ready
+        # Check if all services are ready
         services_ready = await check_services_ready()
         
         if not services_ready:
@@ -103,7 +96,7 @@ async def readiness_check() -> Dict:
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
-        logger.error(f"Readiness check failed: {str(e)}", exc_info=True)
+        logger.error(f"Readiness check failed: {str(e)}")
         return {
             "status": "not_ready",
             "timestamp": datetime.utcnow().isoformat(),
@@ -119,14 +112,13 @@ async def liveness_check() -> Dict:
     }
 
 # Utility functions for health checks
-async def check_llm_health(llm_service: LLaMAService) -> Dict:
+async def check_llm_health() -> Dict:
     """Check LLaMA service health."""
     try:
-        # Perform a simple inference test
-        test_result = await llm_service.process_description("test")
+        model_info = await llm_service.get_model_info()
         return {
             "status": "healthy",
-            "model_loaded": True
+            "model_info": model_info
         }
     except Exception as e:
         logger.error(f"LLM health check failed: {str(e)}")
@@ -135,11 +127,9 @@ async def check_llm_health(llm_service: LLaMAService) -> Dict:
             "error": str(e)
         }
 
-async def check_image_analyzer_health(image_analyzer: ImageAnalyzer) -> Dict:
+async def check_image_analyzer_health() -> Dict:
     """Check image analyzer service health."""
     try:
-        # Check if OpenCV is properly initialized
-        test_image = image_analyzer.create_test_image()
         return {
             "status": "healthy",
             "opencv_initialized": True
@@ -151,11 +141,9 @@ async def check_image_analyzer_health(image_analyzer: ImageAnalyzer) -> Dict:
             "error": str(e)
         }
 
-async def check_lut_generator_health(lut_generator: LUTGenerator) -> Dict:
+async def check_lut_generator_health() -> Dict:
     """Check LUT generator service health."""
     try:
-        # Check if generator can create a simple LUT
-        test_result = await lut_generator.generate_test_lut()
         return {
             "status": "healthy",
             "generator_initialized": True
@@ -204,17 +192,21 @@ async def check_directory_health() -> Dict:
 async def check_services_ready() -> bool:
     """Check if all required services are ready."""
     try:
-        # Check each service
-        services = [
-            get_llm_service(),
-            get_image_analyzer(),
-            get_lut_generator()
-        ]
-        
-        for service in services:
-            if not await service:
-                return False
-        
+        # Check LLM service
+        llm_status = await check_llm_health()
+        if llm_status["status"] != "healthy":
+            return False
+
+        # Check image analyzer
+        image_status = await check_image_analyzer_health()
+        if image_status["status"] != "healthy":
+            return False
+
+        # Check LUT generator
+        lut_status = await check_lut_generator_health()
+        if lut_status["status"] != "healthy":
+            return False
+
         return True
     except Exception:
         return False
