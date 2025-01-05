@@ -2,8 +2,8 @@ import logging
 import os
 from datetime import datetime
 from typing import Any, Dict
+from pathlib import Path
 
-import uvicorn
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -20,19 +20,34 @@ from app.core.middleware import (
     ErrorHandlingMiddleware
 )
 
+
 # Setup logging
 logger = setup_logging()
+
+def ensure_directories():
+    """Ensure all required directories exist."""
+    directories = [
+        "static",
+        "uploads",
+        "output",
+        "logs",
+        settings.UPLOAD_DIR,
+        settings.OUTPUT_DIR
+    ]
+    for directory in directories:
+        Path(directory).mkdir(parents=True, exist_ok=True)
+
 
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application."""
     
+    ensure_directories()
+    
     app = FastAPI(
         title=settings.PROJECT_NAME,
         description="LUT Generator API with LLM and Image Analysis",
-        version="1.0.0",
-        docs_url=None,  # Disable default docs
-        redoc_url=None,  # Disable default redoc
-        openapi_url=None  # Disable default openapi
+        version=settings.VERSION,
+        openapi_tags=settings.TAGS_METADATA
     )
 
     # Configure CORS
@@ -49,13 +64,11 @@ def create_application() -> FastAPI:
     app.add_middleware(ResponseTimeMiddleware)
     app.add_middleware(ErrorHandlingMiddleware)
 
-    # Mount static files
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+    # Mount static directories
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
     app.mount("/output", StaticFiles(directory="output"), name="output")
 
     return app
-
 # Create FastAPI instance
 app = create_application()
 
@@ -63,37 +76,33 @@ app = create_application()
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Custom OpenAPI documentation
+# OpenAPI Documentation
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     
     openapi_schema = get_openapi(
         title=settings.PROJECT_NAME,
-        version="1.0.0",
+        version=settings.VERSION,
         description="LUT Generator API Documentation",
         routes=app.routes,
     )
-    
-    # Custom documentation customization
-    openapi_schema["info"]["x-logo"] = {
-        "url": "static/logo.png"
-    }
     
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
 app.openapi = custom_openapi
 
-# Custom documentation endpoints
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
     return get_swagger_ui_html(
-        openapi_url="/openapi.json",
-        title=f"{settings.PROJECT_NAME} - Swagger UI",
-        oauth2_redirect_url="/docs/oauth2-redirect",
-        swagger_js_url="/static/swagger-ui-bundle.js",
-        swagger_css_url="/static/swagger-ui.css",
+        openapi_url=f"{settings.API_V1_STR}/openapi.json",
+        title=f"{settings.PROJECT_NAME} - Swagger UI"
     )
+
+@app.get(f"{settings.API_V1_STR}/openapi.json", include_in_schema=False)
+async def get_openapi_endpoint():
+    return app.openapi_schema
 
 @app.get("/openapi.json", include_in_schema=False)
 async def get_openapi_endpoint():
@@ -147,6 +156,19 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         }
     )
 
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    logger.info("Starting up LUT Generator API")
+    ensure_directories()
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    logger.info("Shutting down LUT Generator API")
+
 # Main entry point for running the application
 def start():
     """Start the application using uvicorn."""
@@ -171,4 +193,10 @@ def dev():
     )
 
 if __name__ == "__main__":
-    start()
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.RELOAD
+    )

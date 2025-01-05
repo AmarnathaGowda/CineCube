@@ -1,0 +1,32 @@
+{
+  "name": "JokerV1",
+  "description": "Apply a cinematic color grading style with the following characteristics:  Dominant cool tones, including teal, green, and blue in the shadows and midtones. Warm highlights with shades of mustard yellow, beige, and earthy brown. Slight desaturation of colors to create a muted and subdued look. Shadows with a greenish tint for a cold and somber atmosphere. Highlights leaning towards soft yellows and beiges for subtle contrast. Maintain a balance between warm and cool tones to ensure harmony in the overall color palette. Avoid overly bright or saturated colors to preserve the subdued and nostalgic mood.",
+  "parameters": {
+    "temperature": 20,
+    "tint": 0,
+    "saturation": 0,
+    "contrast": 15,
+    "highlights": 0,
+    "shadows": 0,
+    "whites": 0,
+    "blacks": 0,
+    "color_balance": {
+      "shadows": {
+        "red": 0,
+        "green": 0,
+        "blue": 0
+      },
+      "midtones": {
+        "red": 0,
+        "green": 0,
+        "blue": 0
+      },
+      "highlights": {
+        "red": 0,
+        "green": 0,
+        "blue": 0
+      }
+    }
+  },
+  "task_id": "cc65dae9-cd68-4f0a-bf68-c43f52be24b7"
+}

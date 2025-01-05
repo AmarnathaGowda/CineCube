@@ -1,4 +1,4 @@
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, Dict, Optional, Any
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 import time
@@ -12,7 +12,37 @@ from app.services.image.analyzer import ImageAnalyzer
 from app.services.lut.generator import LUTGenerator
 from app.core.logger import get_logger
 
+from app.core.config import settings
+from app.core.logger import get_logger
+
 logger = get_logger(__name__)
+
+
+async def verify_upload_path() -> Path:
+    """Ensure upload directory exists and return path."""
+    try:
+        path = Path(settings.UPLOAD_DIR)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    except Exception as e:
+        logger.error(f"Failed to verify upload path: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not access upload directory"
+        )
+
+async def verify_output_path() -> Path:
+    """Ensure output directory exists and return path."""
+    try:
+        path = Path(settings.OUTPUT_DIR)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    except Exception as e:
+        logger.error(f"Failed to verify output path: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not access output directory"
+        )
 
 # Service dependency instances
 llama_service = LLaMAService()

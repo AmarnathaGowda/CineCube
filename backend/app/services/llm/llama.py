@@ -76,7 +76,6 @@ import logging
 
 from app.core.config import settings
 from app.core.logger import get_logger
-import llama_cpp
 
 logger = get_logger(__name__)
 
@@ -88,22 +87,23 @@ class LLaMAService:
         logger.info("Initializing LLaMA service")
         self.model = None
         self.is_initialized = False
+        self.is_mock = True  # Flag for mock mode
 
     async def initialize(self) -> None:
         """Initialize the model."""
         try:
-            # Initialize the LLaMA model
-            logger.info(f"Loading LLaMA model from {settings.LLAMA_MODEL_PATH}")
-            self.model = llama_cpp.Llama(model_path=str(settings.LLAMA_MODEL_PATH))
-            
-            # Set model parameters
-            self.model.set_context_size(settings.LLAMA_CONTEXT_SIZE)
-            self.model.set_batch_size(settings.LLAMA_BATCH_SIZE)
-            self.model.set_threads(settings.LLAMA_THREADS)
-            self.model.set_gpu_layers(settings.LLAMA_GPU_LAYERS)
-
-            self.is_initialized = True
-            logger.info("LLaMA service initialized successfully")
+            if self.is_mock:
+                # Mock initialization for development
+                self.is_initialized = True
+                logger.info("LLaMA service initialized in mock mode")
+            else:
+                # Real model initialization would go here
+                model_path = Path(settings.LLAMA_MODEL_PATH)
+                if not model_path.exists():
+                    raise ValueError(f"Model file not found at {model_path}")
+                # self.model = llama_cpp.Llama(model_path=str(model_path))
+                self.is_initialized = True
+                
         except Exception as e:
             logger.error(f"Failed to initialize LLaMA service: {str(e)}")
             raise
@@ -111,24 +111,15 @@ class LLaMAService:
     async def process_description(
         self, 
         description: str,
-        preset_params: Optional[Dict[str, Any]] = None
+        image_analysis: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """
-        Process text description to generate LUT parameters.
-        
-        Args:
-            description: User's text description
-            preset_params: Optional preset parameters to incorporate
-            
-        Returns:
-            Dict containing LUT parameters
-        """
+        """Process description and image analysis to generate LUT parameters."""
         try:
             if not self.is_initialized:
                 await self.initialize()
-
-            # For development, return mock parameters
-            base_params = {
+    
+            # In mock mode, generate parameters based on description and image analysis
+            params = {
                 "temperature": 0,
                 "tint": 0,
                 "saturation": 0,
@@ -138,38 +129,35 @@ class LLaMAService:
                 "whites": 0,
                 "blacks": 0,
                 "color_balance": {
-                    "shadows": {
-                        "red": 0,
-                        "green": 0,
-                        "blue": 0
-                    },
-                    "midtones": {
-                        "red": 0,
-                        "green": 0,
-                        "blue": 0
-                    },
-                    "highlights": {
-                        "red": 0,
-                        "green": 0,
-                        "blue": 0
-                    }
+                    "shadows": {"red": 0, "green": 0, "blue": 0},
+                    "midtones": {"red": 0, "green": 0, "blue": 0},
+                    "highlights": {"red": 0, "green": 0, "blue": 0}
                 }
             }
-
-            if preset_params:
-                # Merge preset parameters with base parameters
-                self._merge_parameters(base_params, preset_params)
-
+    
+            # Analyze description to adjust parameters
+            if "warm" in description.lower():
+                params["temperature"] = 20
+            elif "cool" in description.lower():
+                params["temperature"] = -20
+    
+            if "contrast" in description.lower():
+                params["contrast"] = 15
+    
+            # If image analysis is available, use it to refine parameters
+            if image_analysis:
+                if "color_distribution" in image_analysis:
+                    # Adjust parameters based on image analysis
+                    color_dist = image_analysis["color_distribution"]
+                    # Add your color adjustment logic here
+    
             logger.info(
-                "Successfully processed description",
-                extra={
-                    "description_length": len(description),
-                    "parameters": base_params
-                }
+                "Generated LUT parameters",
+                extra={"description_length": len(description), "parameters": params}
             )
-
-            return base_params
-
+    
+            return params
+    
         except Exception as e:
             logger.error(f"Error processing description: {str(e)}")
             raise

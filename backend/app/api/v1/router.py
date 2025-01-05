@@ -32,20 +32,21 @@ async def get_api_key_header(api_key_header: str = Security(api_key_header)):
             )
     return api_key_header
 
+
+
+
 # Health check routes
 api_router.include_router(
     health.router,
     prefix="/health",
-    tags=["health"],
-    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else []
+    tags=["health"]
 )
 
 # LUT generation routes
 api_router.include_router(
     lut.router,
     prefix="/lut",
-    tags=["lut"],
-    dependencies=[Depends(get_api_key_header)] if settings.REQUIRE_API_KEY else []
+    tags=["lut"]
 )
 
 # Current version route
@@ -168,6 +169,8 @@ async def get_endpoints_documentation() -> List[dict]:
 #     )
 
 # Development routes (only available in non-production environments)
+
+
 if not settings.is_production() != "production":
     @api_router.get("/debug/config", tags=["debug"])
     async def get_debug_config():

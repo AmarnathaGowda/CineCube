@@ -1,11 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Tuple
-from pydantic import (
-    AnyHttpUrl, 
-    EmailStr, 
-    HttpUrl, 
-    BaseModel, 
-    field_validator,
-)
+from typing import Any, Dict, List, Optional, Union, Tuple, ClassVar
+from pydantic import AnyHttpUrl, EmailStr, HttpUrl, BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import secrets
 import json
@@ -13,7 +7,19 @@ from pathlib import Path
 import os
 
 class Settings(BaseSettings):
-    # API Settings
+    #TAGS_METADATA
+    TAGS_METADATA: ClassVar[List[Dict[str, str]]] = [
+        {
+            "name": "health",
+            "description": "Health check endpoints"
+        },
+        {
+            "name": "lut",
+            "description": "LUT generation endpoints"
+        }
+    ]
+
+     # API Settings
     PROJECT_NAME: str = "LUT Generator"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
@@ -39,10 +45,8 @@ class Settings(BaseSettings):
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str):
             try:
-                # Try to parse as JSON first
                 return json.loads(v)
             except json.JSONDecodeError:
-                # If not JSON, split by comma
                 return [i.strip() for i in v.split(",")]
         return v
     
@@ -71,7 +75,7 @@ class Settings(BaseSettings):
         return v
     
     # LLaMA Model Settings
-    LLAMA_MODEL_PATH: Path = Path("models/llama-2-7b-chat.gguf")
+    LLAMA_MODEL_PATH: Optional[Path] = Path("models/llama-2-7b-chat.gguf")
     LLAMA_THREADS: int = 4
     LLAMA_CONTEXT_SIZE: int = 2048
     LLAMA_BATCH_SIZE: int = 512
@@ -178,6 +182,14 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="allow"
     )
+
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.ENVIRONMENT == "production"
+
+    def is_development(self) -> bool:
+        """Check if running in development environment."""
+        return self.ENVIRONMENT == "development"
     
     def get_environment_settings(self) -> Dict[str, Any]:
         """Get settings based on environment."""
@@ -217,6 +229,48 @@ class Settings(BaseSettings):
             else:
                 settings_dict[key] = value
         return settings_dict
+    
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.ENVIRONMENT == "production"
+    
+    def is_development(self) -> bool:
+        """Check if running in development environment."""
+        return self.ENVIRONMENT == "development"
+
+    def get_environment_settings(self) -> Dict[str, Any]:
+        """Get settings based on environment."""
+        return {
+            "development": {
+                "DEBUG": True,
+                "RELOAD": True,
+                "LOG_LEVEL": "DEBUG"
+            },
+            "staging": {
+                "DEBUG": False,
+                "RELOAD": False,
+                "LOG_LEVEL": "INFO"
+            },
+            "production": {
+                "DEBUG": False,
+                "RELOAD": False,
+                "LOG_LEVEL": "WARNING",
+                "REQUIRE_API_KEY": True
+            }
+        }.get(self.ENVIRONMENT, {})
+    
+    def get_upload_path(self) -> Path:
+        """Get absolute path for uploads directory."""
+        upload_path = Path(self.UPLOAD_DIR)
+        upload_path.mkdir(parents=True, exist_ok=True)
+        return upload_path.absolute()
+
+    def get_output_path(self) -> Path:
+        """Get absolute path for output directory."""
+        output_path = Path(self.OUTPUT_DIR)
+        output_path.mkdir(parents=True, exist_ok=True)
+        return output_path.absolute()
+    
 
 # Create settings instance
 settings = Settings()

@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.services.llm.llama import LLaMAService
 from app.services.image.analyzer import ImageAnalyzer
 from app.services.lut.generator import LUTGenerator
+
 from app.models.schemas.lut import (
     LUTRequest,
     LUTResponse,
@@ -18,6 +19,7 @@ from app.models.schemas.lut import (
     LUTGenerationStatus,
     LUTMetadata
 )
+
 from app.api.dependencies import (
     get_llm_service,
     get_image_analyzer,
@@ -36,7 +38,7 @@ router = APIRouter()
 # Store ongoing LUT generation tasks
 active_tasks = {}
 
-@router.post("/generate", response_model=LUTResponse)
+@router.post("/generate")
 async def generate_lut(
     description: str = Form(...),
     reference_image: Optional[UploadFile] = File(None),
@@ -47,72 +49,75 @@ async def generate_lut(
     upload_path: Path = Depends(verify_upload_path),
     output_path: Path = Depends(verify_output_path)
 ):
-    """Generate a custom LUT based on text description and optional reference image."""
+    """Generate custom LUT based on description and optional reference image."""
     try:
         # Generate unique task ID
         task_id = str(uuid.uuid4())
         
-        # Validate and process reference image if provided
-        image_params = None
+        # Process reference image if provided
+        image_analysis = None
         if reference_image:
-            await validate_file_size(reference_image.size)
-            await validate_file_extension(reference_image.filename)
-            
-            # Save reference image
+            # Save and analyze image
             image_data = await reference_image.read()
             image_path = upload_path / f"{task_id}_{reference_image.filename}"
             async with aiofiles.open(image_path, 'wb') as f:
                 await f.write(image_data)
-            
-            # Analyze image
-            image_params = await image_analyzer.analyze_image(image_path)
-        
-        # Process description with LLM
-        llm_params = await llm_service.process_description(description)
-        
-        # Apply preset if specified
+            image_analysis = await image_analyzer.analyze_image(image_path)
+            logger.info(f"Image analysis completed for {image_path}")
+
+        # Create description with all inputs
+        full_description = description
         if preset_name:
-            preset_params = await load_preset(preset_name)
-            llm_params = merge_params(llm_params, preset_params)
-        
-        # Generate LUT
+            full_description += f"\nStyle Reference: {preset_name}"
+        if image_analysis:
+            full_description += f"\nImage Analysis: {json.dumps(image_analysis)}"
+
+        # Generate LUT parameters using LLM
+        lut_params = await llm_service.process_description(
+            description=full_description,
+            image_analysis=image_analysis
+        )
+        logger.info(f"Generated LUT parameters for task {task_id}")
+
+        # Generate .cube file
         output_file = output_path / f"{task_id}.cube"
-        lut_data = await lut_generator.generate(
-            llm_params=llm_params,
-            image_params=image_params,
+        await lut_generator.generate(
+            parameters=lut_params,
             output_path=output_file
         )
-        
-        # Generate preview if enabled
-        preview_url = None
-        if settings.ENABLE_PREVIEW:
-            preview_url = await generate_preview(lut_data, task_id, output_path)
-        
-        # Store metadata
-        metadata = LUTMetadata(
-            task_id=task_id,
-            description=description,
-            creation_time=time.time(),
-            preset_name=preset_name,
-            has_reference_image=reference_image is not None
-        )
-        await save_metadata(metadata, output_path / f"{task_id}_metadata.json")
-        
-        return LUTResponse(
-            task_id=task_id,
-            status="completed",
-            lut_file=str(output_file),
-            preview_url=preview_url,
-            metadata=metadata
-        )
-        
+        logger.info(f"Generated LUT file: {output_file}")
+
+        # Save the preset for future reference
+        if preset_name:
+            preset_dir = output_path / "presets"
+            preset_dir.mkdir(parents=True, exist_ok=True)
+            preset_data = {
+                "name": preset_name,
+                "description": description,
+                "parameters": lut_params,
+                "task_id": task_id
+            }
+            preset_file = preset_dir / f"{task_id}_{preset_name}.json"
+            async with aiofiles.open(preset_file, 'w') as f:
+                await f.write(json.dumps(preset_data, indent=2))
+            logger.info(f"Saved preset {preset_name} for task {task_id}")
+
+        # Return response
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "lut_file": str(output_file),
+            "parameters": lut_params,
+            "preset_name": preset_name if preset_name else None
+        }
+
     except Exception as e:
         logger.error(f"LUT generation failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"LUT generation failed: {str(e)}"
+            detail=f"Failed to generate LUT: {str(e)}"
         )
-
+    
 @router.get("/status/{task_id}", response_model=LUTGenerationStatus)
 async def get_generation_status(task_id: str):
     """Get the status of a LUT generation task."""
@@ -129,20 +134,19 @@ async def download_lut(
     task_id: str,
     output_path: Path = Depends(verify_output_path)
 ):
-    """Download a generated LUT file."""
+    """Download generated LUT file."""
     lut_file = output_path / f"{task_id}.cube"
-    
     if not lut_file.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="LUT file not found"
         )
-    
     return FileResponse(
         path=lut_file,
         filename=f"{task_id}.cube",
         media_type="application/octet-stream"
     )
+
 
 @router.get("/preview/{task_id}")
 async def get_preview(

@@ -1,0 +1,32 @@
+{
+  "name": "JokerV2-Greeny",
+  "description": "Apply a dramatic and high-contrast cinematic color grading style with the following characteristics:  Deep green tones dominating the shadows and midtones. Vibrant teal and emerald green highlights for a striking visual impact. Subtle use of warm accents, including mustard yellow and earthy brown, to create contrast against the cool greens. Ensure the lighting is low-key, emphasizing shadows and giving the scene a moody and enclosed feel. Slight desaturation of non-dominant colors to keep the focus on greens and yellows. Maintain a rich, saturated look for greens while allowing warm colors to pop subtly without overpowering the overall palette.",
+  "parameters": {
+    "temperature": 20,
+    "tint": 0,
+    "saturation": 0,
+    "contrast": 15,
+    "highlights": 0,
+    "shadows": 0,
+    "whites": 0,
+    "blacks": 0,
+    "color_balance": {
+      "shadows": {
+        "red": 0,
+        "green": 0,
+        "blue": 0
+      },
+      "midtones": {
+        "red": 0,
+        "green": 0,
+        "blue": 0
+      },
+      "highlights": {
+        "red": 0,
+        "green": 0,
+        "blue": 0
+      }
+    }
+  },
+  "task_id": "98d59c29-f763-4ff9-a10e-d7cf1091a99a"
+}
