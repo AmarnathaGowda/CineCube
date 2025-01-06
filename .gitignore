@@ -169,3 +169,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+#Lut ,Uploaded and prests Jons
+*.cube
+backend/uploads/*
+backend/output/presets/*

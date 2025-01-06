@@ -117,50 +117,136 @@ class LLaMAService:
         try:
             if not self.is_initialized:
                 await self.initialize()
-    
-            # In mock mode, generate parameters based on description and image analysis
-            params = {
-                "temperature": 0,
-                "tint": 0,
-                "saturation": 0,
-                "contrast": 0,
-                "highlights": 0,
-                "shadows": 0,
-                "whites": 0,
-                "blacks": 0,
-                "color_balance": {
-                    "shadows": {"red": 0, "green": 0, "blue": 0},
-                    "midtones": {"red": 0, "green": 0, "blue": 0},
-                    "highlights": {"red": 0, "green": 0, "blue": 0}
-                }
-            }
-    
-            # Analyze description to adjust parameters
-            if "warm" in description.lower():
-                params["temperature"] = 20
-            elif "cool" in description.lower():
-                params["temperature"] = -20
-    
-            if "contrast" in description.lower():
-                params["contrast"] = 15
-    
-            # If image analysis is available, use it to refine parameters
+
+            # Initialize parameters
+            params = self._analyze_text_description(description)
+
+            # If image analysis is available, refine parameters
             if image_analysis:
-                if "color_distribution" in image_analysis:
-                    # Adjust parameters based on image analysis
-                    color_dist = image_analysis["color_distribution"]
-                    # Add your color adjustment logic here
-    
+                params = self._refine_with_image_analysis(params, image_analysis)
+
             logger.info(
                 "Generated LUT parameters",
                 extra={"description_length": len(description), "parameters": params}
             )
-    
+
             return params
-    
+
         except Exception as e:
             logger.error(f"Error processing description: {str(e)}")
             raise
+
+    
+    def _analyze_text_description(self, description: str) -> Dict[str, Any]:
+        """Analyze text description to generate initial parameters."""
+        desc_lower = description.lower()
+        params = {
+            "temperature": 0,
+            "tint": 0,
+            "saturation": 0,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "color_balance": {
+                "shadows": {"red": 0, "green": 0, "blue": 0},
+                "midtones": {"red": 0, "green": 0, "blue": 0},
+                "highlights": {"red": 0, "green": 0, "blue": 0}
+            }
+        }
+
+        # Temperature analysis
+        if any(word in desc_lower for word in ["warm", "orange", "yellow", "red"]):
+            params["temperature"] = 20
+        elif any(word in desc_lower for word in ["cool", "cold", "blue", "teal"]):
+            params["temperature"] = -20
+
+        # Tint analysis
+        if "green" in desc_lower:
+            params["tint"] = -15
+        elif "magenta" in desc_lower or "purple" in desc_lower:
+            params["tint"] = 15
+
+        # Saturation analysis
+        if any(word in desc_lower for word in ["desaturated", "muted", "subdued"]):
+            params["saturation"] = -20
+        elif any(word in desc_lower for word in ["vibrant", "saturated", "colorful"]):
+            params["saturation"] = 20
+
+        # Contrast and tone analysis
+        if "contrast" in desc_lower:
+            params["contrast"] = 15
+        if "deep blacks" in desc_lower or "dark shadows" in desc_lower:
+            params["blacks"] = -20
+            params["shadows"] = -15
+        if "bright highlights" in desc_lower or "light" in desc_lower:
+            params["highlights"] = 10
+            params["whites"] = 10
+
+        # Color balance analysis
+        self._analyze_color_balance(desc_lower, params["color_balance"])
+
+        return params
+    
+    def _analyze_color_balance(self, desc_lower: str, color_balance: Dict) -> None:
+        """Analyze description for color balance adjustments."""
+        # Shadow analysis
+        if "green shadows" in desc_lower or "teal shadows" in desc_lower:
+            color_balance["shadows"]["green"] = 15
+            color_balance["shadows"]["blue"] = 10
+            color_balance["shadows"]["red"] = -10
+        elif "blue shadows" in desc_lower:
+            color_balance["shadows"]["blue"] = 15
+            color_balance["shadows"]["red"] = -10
+
+        # Highlight analysis
+        if "warm highlights" in desc_lower:
+            color_balance["highlights"]["red"] = 15
+            color_balance["highlights"]["green"] = 5
+            color_balance["highlights"]["blue"] = -10
+        elif "cool highlights" in desc_lower:
+            color_balance["highlights"]["blue"] = 15
+            color_balance["highlights"]["red"] = -10
+
+        # Midtone analysis
+        if "warm midtones" in desc_lower:
+            color_balance["midtones"]["red"] = 10
+            color_balance["midtones"]["green"] = 5
+        elif "cool midtones" in desc_lower:
+            color_balance["midtones"]["blue"] = 10
+            color_balance["midtones"]["red"] = -5
+
+    def _refine_with_image_analysis(
+        self,
+        params: Dict[str, Any],
+        image_analysis: Dict
+    ) -> Dict[str, Any]:
+        """Refine parameters based on image analysis."""
+        if "color_distribution" in image_analysis:
+            dist = image_analysis["color_distribution"]
+            
+            # Analyze RGB distribution for color balance
+            if "rgb_averages" in dist:
+                rgb = dist["rgb_averages"]
+                # Adjust color balance based on image color distribution
+                for zone in ["shadows", "midtones", "highlights"]:
+                    params["color_balance"][zone]["red"] += (rgb["red"] - 0.5) * 20
+                    params["color_balance"][zone]["green"] += (rgb["green"] - 0.5) * 20
+                    params["color_balance"][zone]["blue"] += (rgb["blue"] - 0.5) * 20
+    
+        if "contrast" in image_analysis:
+            # Adjust contrast based on image analysis
+            params["contrast"] = max(params["contrast"], 
+                                   image_analysis["contrast"].get("global_contrast", 0) * 20)
+    
+        if "brightness" in image_analysis:
+            # Adjust highlights and shadows based on brightness analysis
+            bright = image_analysis["brightness"]
+            params["highlights"] += (bright.get("average_brightness", 0.5) - 0.5) * 30
+            params["shadows"] += (bright.get("average_brightness", 0.5) - 0.5) * -30
+    
+        return params
 
     async def analyze_style(self, description: str) -> Dict[str, Any]:
         """

@@ -33,7 +33,7 @@ class ImageAnalyzer:
         self.executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKERS)
         logger.info("ImageAnalyzer service initialized")
 
-    async def analyze_image(self, image_path: Path) -> Dict:
+    async def analyze_image(self, image_path: Path) -> Dict[str, Any]:
         """
         Analyze image and extract color characteristics.
         
